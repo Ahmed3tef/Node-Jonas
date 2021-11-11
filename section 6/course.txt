@@ -1,0 +1,16 @@
+عشان نقدر نبعت او نستقبل اي حاجة لازم نخلي السرفر يشتغل والسرفر هو الملف بتاعنا
+1- install nodemon
+2- nodemon app.js
+بعد كدا هنقدر نعمل الاوامر كلها 
+
+to do a post request we need to have a middleware before this.
+1- app.use(express.json()); => this is the middleware.
+
+////////////////////////////////
+
+عشان نعمل باث علي id معين 
+app.get('/api/v1/tours/:id/:x?', (req, res) => {});
+
+1- you can access them from {req.params}.
+2- the id param is required.
+3- th x param is optional.
