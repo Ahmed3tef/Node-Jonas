@@ -1,0 +1,301 @@
+عشان نقدر نبعت او نستقبل اي حاجة لازم نخلي السرفر يشتغل والسرفر هو الملف بتاعنا
+1- install nodemon
+2- nodemon app.js
+بعد كدا هنقدر نعمل الاوامر كلها 
+
+to do a post request we need to have a middleware before this.
+1- app.use(express.json()); => this is the middleware.
+
+////////////////////////////////
+
+عشان نعمل باث علي id معين 
+app.get('/api/v1/tours/:id/:x?', (req, res) => {});
+
+1- you can access them from {req.params}.
+2- the id param is required.
+3- th x param is optional.
+////////////////////////////////
+
+/// section 8
+
+1- we need to specify database consts in config.env file and then make the app see it using dotenv
+
+dotenv.config({ path: './config.env' });
+
+2- discripe the database variable in the server file from process.env
+
+const DB = process.env.DATABASE.replace(
+  '<PASSWORD>',
+  process.env.DATABASE_PASSWORD
+);
+
+
+3- connect to mongoose 
+
+mongoose
+  .connect(DB, {
+    useNewUrlParser: true
+  })
+  .then(con => {
+    console.log('connection was successful');
+  });
+
+4- specify schema 
+
+const tourSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: [true, 'A tour must have a name'],
+    unique: true
+  },
+  price: {
+    type: Number,
+    required: [true, 'A tour must have a price']
+  },
+  rating: {
+    type: Number,
+    default: 4.5
+  }
+});
+
+5- make models from the schema 
+a model is like a blueprint as the classes in js we make database pieces from it and then save them to the database.
+
+const Tour = mongoose.model('Tour', tourSchema);
+* this is the tours in the database
+
+6- make database pieces from the model
+
+const newTour = new Tour({
+  name: 'Forest Hiker',
+  price: 99,
+  rating: 4.7
+});
+
+7- save it 
+
+testTour
+  .save()
+  .then(doc => console.log('successful'))
+  .catch(err => console.log(err + 'ERROR!!'));
+
+
+we can do them both using Tour.create({passing tour data}) => this returns also a promise we can then use async await with it.
+
+////////////////////////////////
+
+to get all data docs in the database we use collection.find() method
+
+if you want to get specific piece of data you pass a param to the method
+
+////////////////////////////////
+
+the params we pass in the url for filtering the results are passed in the url call
+
+api/v1/tours?duration=5&difficulty=easy
+
+duration=5
+difficulty=easy
+
+we can access them throw (req.query)
+
+then we pass them to Tour.find(req.query).
+
+///////////////////////////////
+لو عايزين حاجة اكبر او اصغر هنستخدم [gte, gt, lte, lt]
+api/v1/tours?duration[gt]=5&difficulty[gte]=easy
+
+gt => greater than
+gte => greater than or equal
+lt => less than
+lte => less than or equal
+
+let queryStr = JSON.stringify(queryObj);
+    queryStr = queryStr.replace(/\b(gt|gte|lte|lt)\b/g, match=> `$${match}`);
+
+احنا عملنا كدا هنا عشان ابدل القيم دي باني احط قبلها علامة الدولار عشان مونجوز يفهم الحاجة دي لما تتمرر ف ال url لانه بيفهمها كدا 
+
+///////////////////////////////
+
+sorting
+
+url: api/v1/tours?sort=price,-rating
+
+const sortBy = req.query.sort.split(',').join(' ');
+query = query.sort(sortBy);
+
+لو موجب يبقا تصاعدي 
+لو سالب يبقا تنازلي 
+
+///////////////////////////////
+
+to select only some fields to send back to the user we use (req.query.fields)
+
+if (req.query.fields) {
+  const fields = req.query.fields.split(',').join(' ');
+  query = query.select(fields);
+}else {
+  query = query.sort('-__v');
+  اللي بالسالب هنا معناها اني بقوله هات كل حاجة معادا دا 
+}
+
+///////////////////////////////
+
+Aggregation Pipeline:
+
+const status = await Tour.aggregate([
+    { $match: { ratingsAverage: { $gte: 4.5 } } },
+    {
+      $group: {
+        // الاي دي هنا قيمة ثابتة بتاخد الحاجة اللي احنا عايزين نعمل جروب بيها يعني هنا احنا عاملين الجروب للحاجة اللي الصعوبة بتاعتها زي بعض وهكذا
+        _id: difficulty,
+        numTours: { $sum: 1 }, // هنا هيضيف لكل حاجة داخلة هتحصل ف هو هيزود واحد
+        numRatings: { $sum: '$ratingsAverage' },
+        avgRating: { $avg: '$ratingsAverage' },
+        avgPrice: { $avg: '$price' },
+        minPrice: { $min: '$price' },
+        maxPrice: { $max: '$price' },
+      },
+    },
+    { $sort: { avgPrice: 1 } },
+  ]);
+
+من اسمها هي انبوبة بيعدي فيها كل قطع الداتا اللي عندنا وكل اوبجكت انا بعرفه جوا الاجريجيت اراي دا اسمه استيدج او مرحلة زي ماتش وجروب وسورت اللي كتبناهم
+كأن الانبوب عامل كدا 
+===||===||===||===||===
+
+كل ستيدج هي || بتقطع الانبوب كانها فلتر 
+
+وجود  ماتش ف الاول كأنها فلتر هتعدي بس الحاجات اللي احنا عايزين ليها ماتش 
+وبعد كدا الباقي هيعدي علي اللي بعده
+
+وجود ال _id ف الجروب دا بيقول للحاجات اللي جاية اني هعمل مجموعات اساسها وتجميعها سوا هيكون علي اساس القيمة اللي بعطيها لل _id 
+القيمة دي بتكون property موجودة ف كل عنصر ف الداتا اللي جيالنا
+
+الحاجات التانية غير الاي دي دي الاسامي اللي احنا عايزينها تظهر ف المنتج النهائي والقيم بتاعتها هي اللي هنجيبها من الداتا اللي جيالنا وهنا هنعمل عليها العمليات
+
+$sum: '$ratingsAverage' دا بيخلينا نجمع كل الريت افردج اللي داخل
+
+{ $sort: { avgPrice: 1 } }, دا معناه انه هيرتب علي حسب الافردج برايس تصاعدي 
+سالب 1 لو عايز ترتب تنازلي
+
+///////////////////////////////
+
+stages: 
+
+1- {$unwind: '$startDates'},
+لو انا عندي ف التواريخ دي اراي من كذا تاريخ ف هو هيفصلهم عن بعض ويعملي كذا اوبجكت لنفس العنصر بس كل واحد بتاريخ 
+
+2- group:
+
+- _id: { $month: '$startDates' },
+هنا انا بقوله اني عايز قيمة الشهر اللي موجودة ف قيمة التاريخ دا 
+
+-tours: { $push: '$name' },
+بوش هتعمل اراي وتضيف ف الاراي قيمة كل اسم هعيعدي عليها 
+
+3- {$addFields: { month: '$_id' },},
+
+اي مرحلة بعد الجروب هيعدي عليها الاوبجكت الجديد اللي طالع من الجروب بس 
+
+هنا انا عايز اضيف بروبرتي جديدة الشهر بقيمة الايدي اللي موجود ف الجروب
+
+4- {
+        $project: { _id: 0 },
+      },
+
+الستيت دي هتخليني الغي او اظهر حاجة موجودة ف الوبجكت اللي جايلها 
+هنا اخنا اخفينا الايدي الما اديناله قيمة 0
+
+/////////////////////////////// 
+
+ERROR Handling:
+
+- to handle an error for the hole project we use a middleware 
+- we use it at the end of our middlewares to catch any errors from the previous functions 
+- it is called an error middleware cuz it is starting with an err argument 
+
+app.use((err, req, res, next) => {
+  err.status = err.status || 'error';
+  err.statusCode = err.statusCode || 500;
+
+  res.status(err.statusCode).json({
+    status: err.status,
+    message: err.message,
+  });
+});
+
+- to reatch the error middleware we must throw the error in the global middleware {route of '*'} in next() function 
+
+  app.all('*', (req, res, next) => {
+    next(AppError(`Can't find ${req.originalUrl} on this server`), 404);
+  });
+
+**** important note 
+مش لازم امرر الايرور جوا الجلوبال بس .. لو انا قابلني اي ايرور انا بمرره لاي نكست فنكشن موجودة
+
+
+- it will be better to create our own error class for our purposes
+
+class AppError extends Error {
+  cosntructor(message, statusCode) {
+    super(message); // cuz the error takes just the message of the error
+    this.statusCode = statusCode; // like 404
+    this.status = `${statusCode}`.startsWith('4') ? 'fail' : 'error';
+    this.isOperational = true;
+
+    Error.captureStackTrace(this, this.cosntructor);
+  }
+}
+
+////////////////////////////////////
+
+Authintication 
+
+- the jwt secret should be 32 chars or more 
+
+- to sign the in we need to send a web token to the user and then this token will be the verifier of him each time he logs in.
+
+  const token = jwt.sign({ id: newUser._id }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_IN,
+  });
+
+- after creating it we send it with the res data
+
+///////////////////////////////
+
+authintication => logging user in.
+
+authorization => check if a certain user is allowed to access a certain resource in our application.
+
+///////////////////////////////
+
+- to make a token with a random value
+
+  const resetToken = crypto.randomBytes(32).toString('hex');
+
+- to hash the token then saving the new hashed value to the user data 
+
+this.passwordResetToken = crypto
+    .createHash('sha256')
+    .update(resetToken)
+    .digest('hex');
+
+- to stop validators from preventing the token from being sent 
+
+  await user.save({ validateBeforeSave: false })
+
+we pass the { validateBeforeSave: false } to the save method.
+
+
+////////////////////////////////
+
+to send emails to user's emails we need to install npm package (npm i nodemailer)
+
+///////////////////////////////
+when dealing with sensitive data like passwords don't use findByIdAndUpdate() method 
+instead we use the save method.
+
+///////////////////////////////
+
+the frequency increases and this makes resestance become more than it was and this is known as skin effect.
